@@ -1,4 +1,5 @@
 import sqlite3
+import os
 from kivy.app import App
 from kivy.uix.button import Button
 from kivy.uix.boxlayout import BoxLayout
@@ -9,8 +10,35 @@ from kivy.uix.scrollview import ScrollView
 from kivy.core.window import Window
 from kivy.uix.popup import Popup
 
-DB_FILE = "products.db"
+# Change le répertoire de travail courant pour celui du fichier Python
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
+# Chemin vers la base de données et le dossier d'images
+DB_FILE = "data/articles.db"
+IMAGE_FOLDER = "data/picture"
+
+# Créer le dossier si il n'existe pas
+if not os.path.exists(IMAGE_FOLDER):
+    os.makedirs(IMAGE_FOLDER)
+
+# Créer la table si elle n'existe pas
+def create_table_if_not_exists():
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS products (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nom_produit TEXT NOT NULL,
+            nom_image TEXT NOT NULL,
+            poids REAL NOT NULL,
+            prix_produit REAL NOT NULL,
+            code_barre TEXT NOT NULL UNIQUE
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+# Table des produits
 class ProductTable(GridLayout):
     def __init__(self, app, **kwargs):
         super().__init__(cols=6, size_hint_y=None, row_default_height=50, row_force_default=True)
@@ -42,12 +70,13 @@ class ProductTable(GridLayout):
             self.add_widget(Label(text=str(prix), size_hint_x=None, width=150))
             self.add_widget(Label(text=code, size_hint_x=None, width=250))
             btn_select = Button(text="Sélectionner", size_hint_x=None, width=150)
-            btn_select.bind(on_press=lambda instance, pid=prod_id, pnom=nom, pimage=image, ppoids=poids, pprix=prix, pcode=code: self.select_product(pid, pnom, pimage, ppoids, pprix, pcode))
+            btn_select.bind(on_press=lambda instance, pid=prod_id, pnom=nom, pimage=image, ppoids=poids, pprix=prix, pcode=code: self.select_product(pid, pnom, pimage, ppoids, pprix, pcode, instance))
             self.add_widget(btn_select)
 
-    def select_product(self, product_id, nom, image, poids, prix, code):
+    def select_product(self, product_id, nom, image, poids, prix, code, button_instance):
         self.selected_product_id = product_id
         self.app.populate_inputs(nom, image, poids, prix, code)
+        button_instance.background_color = (0, 1, 0, 1)  # Changer la couleur en vert
 
     def delete_selected_product(self):
         if self.selected_product_id:
@@ -59,6 +88,7 @@ class ProductTable(GridLayout):
             self.selected_product_id = None
             self.load_products()
 
+# Application principale
 class ProductApp(App):
     def build(self):
         Window.size = (1200, 800)
@@ -93,22 +123,41 @@ class ProductApp(App):
     def add_product(self, instance):
         nom = self.input_nom.text
         image = self.input_image.text
-        poids = float(self.input_poids.text) if self.input_poids.text else 0
-        prix = float(self.input_prix.text) if self.input_prix.text else 0
+        poids = self.input_poids.text
+        prix = self.input_prix.text
         code = self.input_code.text
         
-        if nom and code:
+        # Vérifier si tous les champs sont remplis
+        if not (nom and image and poids and prix and code):
+            self.show_error_popup("Tous les champs doivent être remplis!")
+            return
+
+        # Convertir le poids et le prix en float, s'ils sont valides
+        try:
+            poids = float(poids)
+            prix = float(prix)
+        except ValueError:
+            self.show_error_popup("Poids et Prix doivent être des nombres!")
+            return
+        
+        # Vérifiez le chemin absolu de l'image
+        image_path = os.path.join(IMAGE_FOLDER, image)
+        print(f"Chemin de l'image: {image_path}")  # Affichez le chemin d'accès pour déboguer
+        
+        if not os.path.isfile(image_path):
+            self.show_error_popup(f"L'image '{image}' n'existe pas dans le dossier 'data/picture'.")
+        else:
             conn = sqlite3.connect(DB_FILE)
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM products WHERE code_barre=?", (code,))
-            if cursor.fetchone()[0] == 0:
+            if cursor.fetchone()[0] > 0:
+                self.show_error_popup("Le code-barre existe déjà!")
+            else:
                 cursor.execute("INSERT INTO products (nom_produit, nom_image, poids, prix_produit, code_barre) VALUES (?, ?, ?, ?, ?)", (nom, image, poids, prix, code))
                 conn.commit()
-            else:
-                self.show_error_popup("Le code-barre existe déjà!")
-            conn.close()
-            self.product_table.load_products()
-            self.clear_inputs()
+                conn.close()
+                self.product_table.load_products()
+                self.clear_inputs()
     
     def show_error_popup(self, message):
         popup = Popup(title='Erreur', content=Label(text=message), size_hint=(None, None), size=(400, 200))
@@ -129,4 +178,5 @@ class ProductApp(App):
         self.input_code.text = code
 
 if __name__ == '__main__':
+    create_table_if_not_exists()  # Crée la table si elle n'existe pas
     ProductApp().run()
