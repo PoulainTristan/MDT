@@ -19,6 +19,7 @@ scan_cooldown = 3  # Délai entre deux scans du même code
 last_scan_time = {}  # Dictionnaire des derniers scans
 running = True  # État du programme
 camera_active = True  # Contrôle si la caméra doit tourner
+admin_window_open = False  # Variable pour vérifier si la fenêtre admin est ouverte
 
 # Vérifier si un produit est dans la base de données
 def check_product_in_db(code_barre):
@@ -110,6 +111,48 @@ def show_receipt():
     btn_retour = tk.Button(frame_buttons, text="Retourner à l'achat", bg="gray", fg="white", font=("Arial", 14), command=close_window)
     btn_retour.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
 
+# Nouvelle fonction pour afficher la fenêtre de modification
+def open_product_modification_window():
+    global admin_window_open
+    if admin_window_open:  # Si une fenêtre admin est déjà ouverte, ne rien faire
+        return
+
+    modification_window = Toplevel(root)
+    modification_window.title("Modification du produit")
+    modification_window.geometry("400x300")
+    modification_window.transient(root)  # Associe cette fenêtre à la fenêtre principale
+    modification_window.attributes("-topmost", True)  # Garde la fenêtre toujours devant
+
+    frame_buttons = tk.Frame(modification_window)
+    frame_buttons.pack(pady=10, fill=tk.X)
+
+    btn_increase = tk.Button(frame_buttons, text="+", command=lambda: modify_quantity(1))
+    btn_increase.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+
+    btn_decrease = tk.Button(frame_buttons, text="-", command=lambda: modify_quantity(-1))
+    btn_decrease.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+
+    btn_remove = tk.Button(frame_buttons, text="Supprimer", command=remove_product)
+    btn_remove.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+
+    # Bouton pour fermer la fenêtre de modification
+    btn_close = tk.Button(modification_window, text="Fermer", command=modification_window.destroy)
+    btn_close.pack(pady=10)
+
+    # Marquer la fenêtre comme ouverte
+    admin_window_open = True
+
+    # Laisser la fenêtre de modification active sans bloquer les autres interactions
+    modification_window.focus_set()
+
+    # Lorsque la fenêtre de modification est fermée, réinitialiser l'état
+    modification_window.protocol("WM_DELETE_WINDOW", lambda: on_admin_window_close(modification_window))
+
+def on_admin_window_close(window):
+    global admin_window_open
+    admin_window_open = False
+    window.destroy()
+
 # Fonction de capture vidéo
 def update_video():
     global running, camera_active
@@ -126,6 +169,10 @@ def update_video():
 
     for barcode in barcodes:
         barcode_data = barcode.data.decode('utf-8')
+
+        if barcode_data == "0000":
+            # Si le code-barres scanné est 0000, ouvrir la fenêtre de modification
+            open_product_modification_window()
 
         if barcode_data not in last_scan_time or (current_time - last_scan_time[barcode_data]) > scan_cooldown:
             print(f"Code-barres scanné : {barcode_data}")
@@ -175,18 +222,6 @@ frame_list.pack(side=tk.RIGHT, padx=10, pady=10, fill=tk.Y)
 
 listbox = tk.Listbox(frame_list, width=40, height=20)
 listbox.pack(fill=tk.BOTH, expand=True)
-
-frame_buttons = tk.Frame(frame_list)
-frame_buttons.pack(pady=5, fill=tk.X)
-
-btn_increase = tk.Button(frame_buttons, text="+", command=lambda: modify_quantity(1))
-btn_increase.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
-
-btn_decrease = tk.Button(frame_buttons, text="-", command=lambda: modify_quantity(-1))
-btn_decrease.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
-
-btn_remove = tk.Button(frame_buttons, text="Supprimer", command=remove_product)
-btn_remove.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
 
 btn_validate = tk.Button(frame_list, text="Valider l'achat", command=show_receipt, bg="red", fg="white")
 btn_validate.pack(pady=20, fill=tk.X)
