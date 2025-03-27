@@ -1,4 +1,7 @@
+sudo apt-get update
 pip install kivy
 sudo dpkg --configure -a
 sudo apt install xsel
+pip install opencv-python pyzbar
+sudo apt-get install libzbar0
 
