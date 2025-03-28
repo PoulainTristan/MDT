@@ -118,6 +118,9 @@ def open_weight_check_window(nom, prix, barcode_data, correct_weight):
     if barcode_data in weight_check_windows:
         return  # Si la fenêtre est déjà ouverte, ne rien faire
 
+    # Calcul du poids total des produits scannés
+    total_weight = sum(scanned_products[code][2] * float(check_product_in_db(code)[3]) for code in scanned_products)
+
     def correct_weight_action():
         """Si le poids est correct, le produit est ajouté à la liste."""
         if barcode_data in scanned_products:
@@ -134,10 +137,21 @@ def open_weight_check_window(nom, prix, barcode_data, correct_weight):
         weight_window.destroy()
         del weight_check_windows[barcode_data]
 
+    def remove_product_action():
+        """Réduire de 1 la quantité du produit scanné si le poids est incorrect."""
+        if barcode_data in scanned_products:
+            scanned_products[barcode_data][2] -= 1
+            # Si la quantité devient 0 ou moins, on supprime le produit de la liste
+            if scanned_products[barcode_data][2] <= 0:
+                del scanned_products[barcode_data]
+            update_product_list()
+        weight_window.destroy()
+        del weight_check_windows[barcode_data]
+
     # Créer la fenêtre modale de vérification du poids
     weight_window = Toplevel(root)
     weight_window.title("Vérification du poids")
-    weight_window.geometry("300x150")
+    weight_window.geometry("300x200")
     weight_window.transient(root)  # Associe cette fenêtre à la fenêtre principale
     weight_window.attributes("-topmost", True)  # Garde la fenêtre toujours devant
     
@@ -145,14 +159,21 @@ def open_weight_check_window(nom, prix, barcode_data, correct_weight):
     label = tk.Label(weight_window, text=message, font=("Arial", 12))
     label.pack(pady=20)
 
+    # Affichage du poids total de tous les produits scannés
+    total_weight_label = tk.Label(weight_window, text=f"Poids total des produits : {total_weight:.2f} kg", font=("Arial", 12))
+    total_weight_label.pack(pady=10)
+
     frame_buttons = tk.Frame(weight_window)
     frame_buttons.pack(pady=10, fill=tk.X)
 
-    btn_correct = tk.Button(frame_buttons, text="Bon poids", command=correct_weight_action, bg="green", fg="white")
+    btn_correct = tk.Button(frame_buttons, text="Poids ajouté", command=correct_weight_action, bg="green", fg="white")
     btn_correct.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
 
     btn_incorrect = tk.Button(frame_buttons, text="Mauvais poids", command=incorrect_weight_action, bg="red", fg="white")
     btn_incorrect.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+
+    btn_remove = tk.Button(frame_buttons, text="Poids retiré", command=remove_product_action, bg="orange", fg="white")
+    btn_remove.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
 
     # Ajouter la fenêtre au dictionnaire pour marquer qu'elle est ouverte
     weight_check_windows[barcode_data] = weight_window
