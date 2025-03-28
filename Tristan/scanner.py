@@ -6,9 +6,41 @@ import tkinter as tk
 from tkinter import messagebox, Toplevel
 from PIL import Image, ImageTk
 from pyzbar.pyzbar import decode
+import subprocess
+import psutil  # pip install psutil
 
 # Répertoire de travail courant
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
+###############################
+# Vérification et lancement de update_articles.py
+###############################
+
+def is_update_script_running():
+    """
+    Vérifie si update_articles.py est déjà lancé.
+    """
+    for proc in psutil.process_iter(attrs=['cmdline']):
+        try:
+            cmd = proc.info['cmdline']
+            if cmd and any("update_articles.py" in part for part in cmd):
+                return True
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            continue
+    return False
+
+def launch_update_script():
+    """
+    Lance le script update_articles.py dans un processus séparé.
+    """
+    # On suppose que le script update_articles.py se trouve dans le même répertoire
+    subprocess.Popen(["python", "update_articles.py"])
+    print("Lancement de update_articles.py...")
+
+if not is_update_script_running():
+    launch_update_script()
+else:
+    print("update_articles.py est déjà en cours d'exécution.")
 
 # Chemin vers la base de données
 DB_FILE = "data/articles.db"
