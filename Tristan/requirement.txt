@@ -4,4 +4,5 @@ sudo dpkg --configure -a
 sudo apt install xsel
 pip install opencv-python pyzbar
 sudo apt-get install libzbar0
-
+pip install requests
+pip install psutil
