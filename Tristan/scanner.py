@@ -20,6 +20,7 @@ last_scan_time = {}  # Dictionnaire des derniers scans
 running = True  # État du programme
 camera_active = True  # Contrôle si la caméra doit tourner
 admin_window_open = False  # Variable pour vérifier si la fenêtre admin est ouverte
+weight_check_windows = {}  # Dictionnaire pour gérer les fenêtres de vérification de poids par produit
 
 # Vérifier si un produit est dans la base de données
 def check_product_in_db(code_barre):
@@ -111,47 +112,50 @@ def show_receipt():
     btn_retour = tk.Button(frame_buttons, text="Retourner à l'achat", bg="gray", fg="white", font=("Arial", 14), command=close_window)
     btn_retour.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
 
-# Nouvelle fonction pour afficher la fenêtre de modification
-def open_product_modification_window():
-    global admin_window_open
-    if admin_window_open:  # Si une fenêtre admin est déjà ouverte, ne rien faire
-        return
+# Nouvelle fonction pour afficher la fenêtre de vérification du poids
+def open_weight_check_window(nom, prix, barcode_data, correct_weight):
+    # Vérifier si une fenêtre de vérification du poids est déjà ouverte pour ce produit
+    if barcode_data in weight_check_windows:
+        return  # Si la fenêtre est déjà ouverte, ne rien faire
 
-    modification_window = Toplevel(root)
-    modification_window.title("Modification du produit")
-    modification_window.geometry("400x300")
-    modification_window.transient(root)  # Associe cette fenêtre à la fenêtre principale
-    modification_window.attributes("-topmost", True)  # Garde la fenêtre toujours devant
+    def correct_weight_action():
+        """Si le poids est correct, le produit est ajouté à la liste."""
+        if barcode_data in scanned_products:
+            scanned_products[barcode_data][2] += 1
+        else:
+            scanned_products[barcode_data] = [nom, prix, 1]
+        update_product_list()
+        weight_window.destroy()
+        del weight_check_windows[barcode_data]
 
-    frame_buttons = tk.Frame(modification_window)
+    def incorrect_weight_action():
+        """Si le poids est incorrect, on affiche un message d'erreur et on ignore le produit."""
+        messagebox.showerror("Poids incorrect", "Le poids du produit est incorrect. Retirer le produit.")
+        weight_window.destroy()
+        del weight_check_windows[barcode_data]
+
+    # Créer la fenêtre modale de vérification du poids
+    weight_window = Toplevel(root)
+    weight_window.title("Vérification du poids")
+    weight_window.geometry("300x150")
+    weight_window.transient(root)  # Associe cette fenêtre à la fenêtre principale
+    weight_window.attributes("-topmost", True)  # Garde la fenêtre toujours devant
+    
+    message = f"Poids de {nom} : {correct_weight} kg\nLe poids détecté est-il le bon ?"
+    label = tk.Label(weight_window, text=message, font=("Arial", 12))
+    label.pack(pady=20)
+
+    frame_buttons = tk.Frame(weight_window)
     frame_buttons.pack(pady=10, fill=tk.X)
 
-    btn_increase = tk.Button(frame_buttons, text="+", command=lambda: modify_quantity(1))
-    btn_increase.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+    btn_correct = tk.Button(frame_buttons, text="Bon poids", command=correct_weight_action, bg="green", fg="white")
+    btn_correct.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
 
-    btn_decrease = tk.Button(frame_buttons, text="-", command=lambda: modify_quantity(-1))
-    btn_decrease.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+    btn_incorrect = tk.Button(frame_buttons, text="Mauvais poids", command=incorrect_weight_action, bg="red", fg="white")
+    btn_incorrect.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
 
-    btn_remove = tk.Button(frame_buttons, text="Supprimer", command=remove_product)
-    btn_remove.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
-
-    # Bouton pour fermer la fenêtre de modification
-    btn_close = tk.Button(modification_window, text="Fermer", command=modification_window.destroy)
-    btn_close.pack(pady=10)
-
-    # Marquer la fenêtre comme ouverte
-    admin_window_open = True
-
-    # Laisser la fenêtre de modification active sans bloquer les autres interactions
-    modification_window.focus_set()
-
-    # Lorsque la fenêtre de modification est fermée, réinitialiser l'état
-    modification_window.protocol("WM_DELETE_WINDOW", lambda: on_admin_window_close(modification_window))
-
-def on_admin_window_close(window):
-    global admin_window_open
-    admin_window_open = False
-    window.destroy()
+    # Ajouter la fenêtre au dictionnaire pour marquer qu'elle est ouverte
+    weight_check_windows[barcode_data] = weight_window
 
 # Fonction de capture vidéo
 def update_video():
@@ -170,9 +174,9 @@ def update_video():
     for barcode in barcodes:
         barcode_data = barcode.data.decode('utf-8')
 
-        if barcode_data == "0000":
+        if barcode_data == "0000" and not admin_window_open:
             # Si le code-barres scanné est 0000, ouvrir la fenêtre de modification
-            open_product_modification_window()
+            open_admin_window()
 
         if barcode_data not in last_scan_time or (current_time - last_scan_time[barcode_data]) > scan_cooldown:
             print(f"Code-barres scanné : {barcode_data}")
@@ -180,13 +184,12 @@ def update_video():
             product = check_product_in_db(barcode_data)
             if product:
                 nom, prix = product[1], float(product[4])
-                if barcode_data in scanned_products:
-                    scanned_products[barcode_data][2] += 1
-                else:
-                    scanned_products[barcode_data] = [nom, prix, 1]
+                
+                # Vérification du poids : obtenir le poids réel depuis la base de données
+                correct_weight = float(product[3])  # Poids correct provenant de la base de données
+                open_weight_check_window(nom, prix, barcode_data, correct_weight)
 
                 last_scan_time[barcode_data] = current_time
-                update_product_list()
             else:
                 print(f"Produit non trouvé : {barcode_data}")
 
@@ -199,6 +202,41 @@ def update_video():
 
     if running:
         root.after(10, update_video)
+
+def open_admin_window():
+    global admin_window_open
+    admin_window_open = True  # Marquer la fenêtre admin comme ouverte
+
+    admin_window = Toplevel(root)
+    admin_window.title("Fenêtre Admin 0000")
+    admin_window.geometry("300x300")
+    admin_window.transient(root)  # Associe cette fenêtre à la fenêtre principale
+    admin_window.attributes("-topmost", True)  # Garde la fenêtre toujours devant
+
+    label = tk.Label(admin_window, text="Fenêtre Administrateur", font=("Arial", 14))
+    label.pack(pady=20)
+
+    # Ajouter des boutons pour gérer les produits
+    frame_buttons = tk.Frame(admin_window)
+    frame_buttons.pack(pady=10, fill=tk.X)
+
+    btn_increase = tk.Button(frame_buttons, text="+", command=lambda: modify_quantity(1))
+    btn_increase.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+
+    btn_decrease = tk.Button(frame_buttons, text="-", command=lambda: modify_quantity(-1))
+    btn_decrease.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+
+    btn_remove = tk.Button(frame_buttons, text="Supprimer", command=remove_product)
+    btn_remove.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+
+    # Bouton pour fermer la fenêtre admin
+    btn_close_admin = tk.Button(admin_window, text="Fermer", command=lambda: close_admin_window(admin_window))
+    btn_close_admin.pack(pady=10)
+
+def close_admin_window(window):
+    global admin_window_open
+    admin_window_open = False
+    window.destroy()
 
 # Interface graphique avec Tkinter
 root = tk.Tk()
